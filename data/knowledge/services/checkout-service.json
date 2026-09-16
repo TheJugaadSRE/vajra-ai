@@ -1,0 +1,19 @@
+{
+  "service": "checkout-service",
+  "owner": "Checkout Platform Team",
+  "oncall": "checkout-oncall@vajra.example (PagerDuty: checkout-primary)",
+  "criticality": "tier-1",
+  "revenue_per_minute_downtime_usd": 4200,
+  "dependencies": [
+    { "service": "checkout-db", "type": "sync", "criticality": "critical" },
+    { "service": "payment-service", "type": "sync", "criticality": "critical" },
+    { "service": "redis-session-cache", "type": "sync", "criticality": "high" }
+  ],
+  "known_failure_modes": [
+    "connection pool exhaustion after deploy",
+    "payment-service timeout cascade",
+    "redis session cache eviction storm"
+  ],
+  "deployment_system": "ArgoCD",
+  "runbook": "rollback-checkout-v3"
+}

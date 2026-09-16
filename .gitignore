@@ -116,6 +116,10 @@ dist
 # DynamoDB Local files
 .dynamodb/
 
+# VAJRA local dev
+.data/
+cdk.out/
+
 # Firebase cache directory
 .firebase/
 

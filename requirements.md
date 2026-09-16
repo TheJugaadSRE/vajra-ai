@@ -1,5 +1,7 @@
 # Requirements Document
 
+> **Note:** this document describes the original long-term/enterprise-scale requirements and is aspirational, not a description of the current implementation. For what is actually built and runnable today, see [docs/architecture.md](docs/architecture.md) and the root [README.md](README.md).
+
 ## Introduction
 
 **VAJRA AI** (Virtual Autonomous Journey for Reliability & Availability) is an enterprise-grade AI platform that predicts failures, prevents outages, blocks bot attacks, and autonomously heals production systems - protecting millions in revenue for digital businesses. The platform integrates observability, AIOps, SecOps, bot protection, predictive AI, autonomous remediation, and digital twin simulation into a unified AI-powered tool designed for enterprise-scale production environments.

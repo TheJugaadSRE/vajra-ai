@@ -1,0 +1,45 @@
+{
+  "rules": [
+    {
+      "id": "block-destructive-actions",
+      "match": { "action_type": "*delete*" },
+      "decision": { "action_allowed": false, "requires_approval": true },
+      "reason": "Destructive actions are never permitted through automated remediation"
+    },
+    {
+      "id": "prod-rollback-requires-approval",
+      "match": { "environment": "production", "action_type": "rollback_deployment" },
+      "decision": { "action_allowed": true, "requires_approval": true },
+      "reason": "Production rollbacks always require human approval"
+    },
+    {
+      "id": "prod-restart-tier1-requires-approval",
+      "match": { "environment": "production", "action_type": "restart_service" },
+      "decision": { "action_allowed": true, "requires_approval": true },
+      "reason": "Production restarts on tier-1 services require human approval"
+    },
+    {
+      "id": "prod-scale-auto-allowed",
+      "match": { "environment": "production", "action_type": "scale_service" },
+      "decision": { "action_allowed": true, "requires_approval": false },
+      "reason": "Scaling actions are low-risk and reversible; auto-approved even in production"
+    },
+    {
+      "id": "non-prod-auto-allowed",
+      "match": { "environment": "qa|staging|dev", "action_type": "*" },
+      "decision": { "action_allowed": true, "requires_approval": false },
+      "reason": "Non-production actions are auto-approved"
+    },
+    {
+      "id": "no-action-auto-allowed",
+      "match": { "action_type": "no_action" },
+      "decision": { "action_allowed": true, "requires_approval": false },
+      "reason": "No infrastructure action requested"
+    }
+  ],
+  "default_decision": {
+    "action_allowed": false,
+    "requires_approval": true,
+    "reason": "No matching policy rule; defaulting to safe (human approval required)"
+  }
+}

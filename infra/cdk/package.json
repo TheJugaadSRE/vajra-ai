@@ -1,0 +1,27 @@
+{
+  "name": "@vajra/infra",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --all"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.899.0",
+    "@aws-sdk/client-eventbridge": "^3.899.0",
+    "@aws-sdk/client-sfn": "^3.899.0",
+    "@aws-sdk/lib-dynamodb": "^3.899.0",
+    "@vajra/core": "^0.1.0",
+    "aws-cdk-lib": "^2.164.1",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.164.1",
+    "esbuild": "^0.24.0",
+    "ts-node": "^10.9.2",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.6.3"
+  }
+}
