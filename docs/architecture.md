@@ -30,7 +30,8 @@ data/                 service catalog, runbooks, and the checkout-service demo s
 | Incident Manager | `packages/core/src/incidents/manager.ts` | Dedupe/correlate events into incidents, own the timeline |
 | Detection Agent | `packages/core/src/agents/detectionAgent.ts` | Thin wrapper around correlation — deliberately deterministic |
 | Diagnosis Agent | `packages/core/src/agents/diagnosisAgent.ts` + `reasoning/` | Drives a tool-use loop (mock or real Bedrock) to produce a structured, schema-validated `DiagnosisResult` |
-| Tools | `packages/core/src/tools/registry.ts` | `get_metrics`, `query_logs`, `get_recent_deployments`, `get_service_dependencies`, `get_runbook`, `get_similar_incidents`, `get_service_owner`, `get_oncall` — real calls against providers, never fabricated |
+| Tools | `packages/core/src/tools/registry.ts` | `get_metrics`, `query_logs`, `get_recent_deployments`, `get_service_dependencies`, `get_runbook`, `get_similar_incidents`, `get_service_owner`, `get_oncall`, `get_traffic_pattern`, `get_threat_intel` — real calls against providers, never fabricated |
+| Digital Twin simulation | `packages/core/src/simulation/digitalTwin.ts` | A deterministic heuristic projection of predicted error rate/latency/cost for each candidate action, computed right after diagnosis and shown before approval — explicitly labeled as a heuristic model, not a trained model or a live topology replica |
 | Policy Engine | `packages/core/src/policy/engine.ts` + `rules.json` | The only thing that decides whether an action is allowed / needs approval. The model never decides this |
 | Mitigation Agent | `packages/core/src/agents/mitigationAgent.ts` | Bridges Diagnosis's recommendation to the Policy Engine's decision |
 | Approval workflow | `packages/core/src/workflow/approval.ts` | Small explicit state machine: PENDING -> APPROVED/REJECTED, exactly once |
@@ -90,16 +91,23 @@ Every external system is behind an interface with a `Mock*` implementation today
 ```
 ObservabilityProvider  -> MockObservabilityProvider | DynatraceObservabilityProvider | CloudWatchObservabilityProvider
 DeploymentProvider     -> MockDeploymentProvider     | ArgoCDDeploymentProvider | JenkinsDeploymentProvider | KubernetesDeploymentProvider
+SecurityProvider       -> MockSecurityProvider        | CloudflareSecurityProvider | AwsWafSecurityProvider
 TicketingProvider      -> MockTicketingProvider       | JiraTicketingProvider | ServiceNowTicketingProvider
 ```
 
 Implementing Phase 2 for any one of these means writing one class, not touching agents/policy/execution/UI.
 
+## The second demo scenario: bot traffic, auto-remediated
+
+`data/scenarios/bot-attack-incident.json` drives a second incident type through the *same* pipeline, chosen specifically to exercise the other branch of the Policy Engine: `block_traffic` is a low-risk, reversible action (`policy/rules.json`'s `block-traffic-auto-allowed` rule), so this incident runs DETECT through RESOLVED with **no human approval step at all** — a useful contrast against the checkout-service rollback scenario, which always requires approval in production. `MockReasoner` branches into a security-specific investigation (`get_traffic_pattern`, `get_threat_intel`) whenever an incident's symptoms match `/bot|ddos|scraping|suspicious traffic|traffic spike/i`; everything else about the pipeline (correlation, structured diagnosis, execution re-validation, verification) is identical to the deployment-regression path.
+
+The dashboard's traffic chart, threat-intel list, and revenue-protection panel are fed by real endpoints (`GET /api/security/traffic`, `GET /api/business-impact`) backed by these mock providers — they are live, not the earlier "synthetic Roadmap Preview" placeholder, though "live" here still means "live against a mock," not a real WAF/Dynatrace/Cloudflare integration.
+
 ## What's explicitly NOT built (roadmap, not silently missing)
 
-- Real Dynatrace/CloudWatch/Jira/ServiceNow/Slack/Teams/Kubernetes/ArgoCD integrations (Phase 2)
+- Real Dynatrace/CloudWatch/Jira/ServiceNow/Slack/Teams/Kubernetes/ArgoCD/Cloudflare/AWS WAF integrations (Phase 2)
 - Vector-based knowledge retrieval / Bedrock Knowledge Bases (Phase 2) — today's knowledge base is local JSON/Markdown with keyword lookup
-- Digital Twin simulation, Predictive Failure forecasting, Security/Bot behavioral ML — the dashboard's "Roadmap Preview" panel shows what these *would* look like with clearly synthetic, static data; they are not live models
+- Predictive Failure forecasting (time-series-based prediction of *future* failures) and real behavioral/ML-based bot detection — the Digital Twin simulation and Security Intelligence panel described above are deterministic heuristics against mock data, not trained models
 - RBAC, multi-tenant isolation, real authentication (Phase 3)
 - Evaluation framework against a historical incident corpus (Phase 3)
 - AgentCore Gateway/MCP tool connectivity (Phase 3) — the current tool layer is a plain in-process registry, which is the right scope for one process talking to mock providers

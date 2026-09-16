@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SeveritySchema } from "./event";
 import { DiagnosisResultSchema } from "./diagnosis";
+import { SimulationResultSchema } from "./simulation";
 import {
   ApprovalRecordSchema,
   ExecutionRecordSchema,
@@ -42,6 +43,7 @@ export const IncidentSchema = z.object({
   updated_at: z.string(),
   timeline: z.array(TimelineEntrySchema),
   diagnosis: DiagnosisResultSchema.nullable(),
+  simulation: SimulationResultSchema.nullable(),
   policy_decision: PolicyDecisionSchema.nullable(),
   approval: ApprovalRecordSchema.nullable(),
   execution: ExecutionRecordSchema.nullable(),

@@ -20,7 +20,7 @@ export const RiskSchema = z.enum(["low", "medium", "high", "critical"]);
 export type Risk = z.infer<typeof RiskSchema>;
 
 export const RecommendedActionSchema = z.object({
-  type: z.enum(["rollback_deployment", "restart_service", "scale_service", "no_action"]),
+  type: z.enum(["rollback_deployment", "restart_service", "scale_service", "block_traffic", "no_action"]),
   target: z.object({
     service: z.string(),
     environment: z.string(),

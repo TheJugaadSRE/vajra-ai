@@ -1,14 +1,22 @@
 import { Handler } from "aws-lambda";
-import { DynamoIncidentStore, IncidentManager, MockDeploymentProvider, MockObservabilityProvider, execute } from "@vajra/core";
+import {
+  DynamoIncidentStore,
+  IncidentManager,
+  MockDeploymentProvider,
+  MockSecurityProvider,
+  MockObservabilityProvider,
+  execute,
+} from "@vajra/core";
 
 const store = new DynamoIncidentStore(process.env.TABLE_NAME!);
 const incidentManager = new IncidentManager(store);
 const deployment = new MockDeploymentProvider();
-// NOTE: MockObservabilityProvider's health state is in-memory per Lambda
-// container, so it will NOT reflect the markDegraded() call made by
-// orchestrate.ts's separate container in this distributed deployment — a
-// real deployment replaces this with a real ObservabilityProvider (Phase 2),
-// which doesn't have this limitation. This is a known, called-out gap of
+const security = new MockSecurityProvider();
+// NOTE: MockObservabilityProvider's/MockSecurityProvider's health state is
+// in-memory per Lambda container, so it will NOT reflect the markDegraded()
+// call made by orchestrate.ts's separate container in this distributed
+// deployment — a real deployment replaces these with real providers (Phase
+// 2), which don't have this limitation. This is a known, called-out gap of
 // running the "mock demo narrative" across AWS Lambda rather than one process.
 const observability = new MockObservabilityProvider();
 
@@ -22,7 +30,7 @@ export const handler: Handler<Input, Input> = async ({ incident_id }) => {
   if (!incident) throw new Error(`Incident not found: ${incident_id}`);
 
   await incidentManager.updateStatus(incident_id, "REMEDIATING");
-  const record = await execute(incident, deployment, observability);
+  const record = await execute(incident, deployment, security, observability);
   await incidentManager.patch(incident_id, { execution: record });
   await incidentManager.appendTimeline(incident_id, "execution", `${record.action}: ${record.status} — ${record.result}`, "agent");
 

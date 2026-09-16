@@ -165,13 +165,42 @@ export default function IncidentDetail() {
             )}
           </Section>
 
+          {incident.simulation && (
+            <Section title="Digital twin simulation (predicted outcome)">
+              <Typography style={{ color: "#64748b", fontSize: "12px", marginBottom: "10px" }}>
+                Simulated projection from a deterministic heuristic model — not a trained model or a live topology
+                replica. Baseline: {incident.simulation.baseline.error_rate}% error rate, {incident.simulation.baseline.latency_ms}ms latency.
+              </Typography>
+              {incident.simulation.scenarios.map((s) => (
+                <div
+                  key={s.action}
+                  style={{
+                    padding: "8px 0",
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Typography style={{ color: s.action === incident.simulation.recommended_scenario ? "#22c55e" : "#cbd5e1" }}>
+                    <b>{s.action}</b>
+                    {s.action === incident.simulation.recommended_scenario ? " (recommended)" : ""}
+                  </Typography>
+                  <Typography style={{ color: "#94a3b8", fontSize: "13px" }}>
+                    error: {s.predicted_error_rate}% · latency: {s.predicted_latency_ms}ms · cost: {s.cost_impact}
+                  </Typography>
+                </div>
+              ))}
+            </Section>
+          )}
+
           {approval && approval.status === "PENDING" && (
             <Section title="Human approval required">
               <Typography style={{ color: "#eab308", marginBottom: "12px" }}>
                 This action requires human approval before it can run against {incident.environment}.
               </Typography>
               <Button variant="contained" color="success" onClick={() => handleDecision("approve")} disabled={busy} style={{ marginRight: "10px" }}>
-                Approve rollback
+                Approve {diagnosis.recommended_action.type.replace(/_/g, " ")}
               </Button>
               <Button variant="outlined" color="error" onClick={() => handleDecision("reject")} disabled={busy}>
                 Reject

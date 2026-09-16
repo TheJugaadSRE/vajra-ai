@@ -126,6 +126,30 @@ const getOncall: Tool = {
   },
 };
 
+const getTrafficPattern: Tool = {
+  name: "get_traffic_pattern",
+  description: "Get recent inbound request-rate history for the incident's service, to spot traffic spikes",
+  inputSchema: noInput,
+  async execute(_input, ctx: ToolContext): Promise<ToolResult> {
+    const points = await ctx.security.getTrafficPattern(ctx.incident.service, ctx.incident.environment);
+    return { summary: points.map((p) => `${p.time}: ${p.requests_per_minute} req/min`).join(", "), data: points };
+  },
+};
+
+const getThreatIntel: Tool = {
+  name: "get_threat_intel",
+  description: "Get suspicious/high-volume source IPs currently hitting the incident's service",
+  inputSchema: noInput,
+  async execute(_input, ctx: ToolContext): Promise<ToolResult> {
+    const ips = await ctx.security.getSuspiciousIps(ctx.incident.service, ctx.incident.environment);
+    if (ips.length === 0) return { summary: "No suspicious IPs currently flagged", data: [] };
+    return {
+      summary: ips.map((ip) => `${ip.ip} (${ip.requests_per_minute} req/min, threat score ${ip.threat_score})`).join("; "),
+      data: ips,
+    };
+  },
+};
+
 export function buildToolRegistry(): Map<string, Tool> {
   const tools: Tool[] = [
     getMetrics,
@@ -137,6 +161,8 @@ export function buildToolRegistry(): Map<string, Tool> {
     getServiceDependencies,
     getRecentChanges,
     getRunbook,
+    getTrafficPattern,
+    getThreatIntel,
     getSimilarIncidents,
     getServiceOwner,
     getOncall,

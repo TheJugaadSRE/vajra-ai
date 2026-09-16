@@ -1,9 +1,15 @@
 import { ExecutionRecord, Incident } from "../schema";
 import { DeploymentProvider } from "../providers/deployment";
+import { SecurityProvider } from "../providers/security";
 import { ObservabilityProvider } from "../providers/observability";
 import { validateAndDispatch } from "./toolGateway";
 
-export async function execute(incident: Incident, deployment: DeploymentProvider, observability: ObservabilityProvider): Promise<ExecutionRecord> {
+export async function execute(
+  incident: Incident,
+  deployment: DeploymentProvider,
+  security: SecurityProvider,
+  observability: ObservabilityProvider
+): Promise<ExecutionRecord> {
   if (!incident.diagnosis || !incident.policy_decision) {
     throw new Error("Cannot execute without a diagnosis and policy decision");
   }
@@ -16,6 +22,7 @@ export async function execute(incident: Incident, deployment: DeploymentProvider
       incident.policy_decision,
       incident.approval,
       deployment,
+      security,
       observability
     );
     return {

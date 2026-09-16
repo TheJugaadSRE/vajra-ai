@@ -59,6 +59,7 @@ export class IncidentManager {
         }),
       ],
       diagnosis: null,
+      simulation: null,
       policy_decision: null,
       approval: null,
       execution: null,

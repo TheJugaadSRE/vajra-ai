@@ -11,7 +11,7 @@
   "scripts": {
     "build": "npm run build -w packages/core",
     "dev": "concurrently -k -n core,api,web -c blue,green,magenta \"npm run build -w packages/core -- --watch\" \"npm run dev -w services/api-local\" \"npm run start -w apps/web\"",
-    "test": "npm run build -w packages/core && npm run test -w packages/core && npm run test -w services/api-local",
+    "test": "npm run build -w packages/core && npm run test -w packages/core && npm run test -w services/api-local && npm run typecheck -w infra/cdk",
     "cdk:synth": "npm run synth -w infra/cdk"
   },
   "devDependencies": {

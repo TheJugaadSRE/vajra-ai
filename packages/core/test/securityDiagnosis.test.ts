@@ -8,10 +8,11 @@ import { KnowledgeStore } from "../src/knowledge/store";
 import { MockReasoner } from "../src/reasoning/mock";
 import { DiagnosisAgent } from "../src/agents/diagnosisAgent";
 import { buildToolContext } from "../src/context/collector";
+import { PolicyEngine } from "../src/policy/engine";
 import path from "path";
 
-describe("DiagnosisAgent with MockReasoner", () => {
-  it("identifies the recent deployment as the root cause when metrics are degraded", async () => {
+describe("DiagnosisAgent with MockReasoner — security/bot-attack incident", () => {
+  it("identifies flagged IPs as the cause of a traffic spike and recommends blocking them, auto-allowed by policy", async () => {
     const store = new InMemoryIncidentStore();
     const manager = new IncidentManager(store);
     const observability = new MockObservabilityProvider();
@@ -24,8 +25,8 @@ describe("DiagnosisAgent with MockReasoner", () => {
         eventType: "ALERT_TRIGGERED",
         service: "checkout-service",
         environment: "production",
-        severity: "critical",
-        alert: "HTTP 500 spike",
+        severity: "high",
+        alert: "Suspicious traffic spike detected",
         source: "Dynatrace",
       })
     );
@@ -39,11 +40,13 @@ describe("DiagnosisAgent with MockReasoner", () => {
     );
     const diagnosis = await agent.diagnose(incident, ctx, baselineMetrics);
 
-    expect(diagnosis.primary_hypothesis).toMatch(/1\.4\.82/);
-    expect(diagnosis.recommended_action.type).toBe("rollback_deployment");
-    expect(diagnosis.risk).toBe("high");
-    expect(diagnosis.human_approval_required).toBe(true);
-    expect(diagnosis.contradicting_evidence.length).toBeGreaterThan(0);
-    expect(diagnosis.tool_calls.length).toBeGreaterThan(0);
+    expect(diagnosis.recommended_action.type).toBe("block_traffic");
+    expect(diagnosis.recommended_action.params?.ips).toBeDefined();
+    expect(diagnosis.supporting_evidence.length).toBeGreaterThan(0);
+
+    const policy = new PolicyEngine().evaluate("production", diagnosis.recommended_action);
+    expect(policy.action_allowed).toBe(true);
+    expect(policy.requires_approval).toBe(false);
+    expect(policy.matched_rule).toBe("block-traffic-auto-allowed");
   });
 });

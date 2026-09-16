@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ObservabilityProvider } from "../providers/observability";
 import { DeploymentProvider } from "../providers/deployment";
+import { SecurityProvider } from "../providers/security";
 import { KnowledgeStore } from "../knowledge/store";
 import { IncidentStore } from "../memory/incidentStore";
 import { Incident } from "../schema";
@@ -9,6 +10,7 @@ export interface ToolContext {
   incident: Incident;
   observability: ObservabilityProvider;
   deployment: DeploymentProvider;
+  security: SecurityProvider;
   knowledge: KnowledgeStore;
   memory: IncidentStore;
 }

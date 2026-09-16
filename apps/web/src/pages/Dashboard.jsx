@@ -5,6 +5,7 @@ import { listIncidents, runDemoScenario } from "../api/client";
 import { SEVERITY_COLOR, SEVERITY_LABEL, STATUS_COLOR } from "../statusColors";
 import BotAttackChart from "../components/BotAttackChart";
 import BotThreatIntel from "../components/BotThreatIntel";
+import RevenueImpact from "../components/RevenueImpact";
 
 const panelStyle = {
   padding: "18px",
@@ -18,7 +19,7 @@ const panelStyle = {
 
 export default function Dashboard() {
   const [incidents, setIncidents] = useState([]);
-  const [starting, setStarting] = useState(false);
+  const [starting, setStarting] = useState(null);
   const navigate = useNavigate();
 
   const refresh = useCallback(() => {
@@ -31,25 +32,30 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const startDemo = async () => {
-    setStarting(true);
+  const startDemo = async (scenario) => {
+    setStarting(scenario);
     try {
-      await runDemoScenario();
+      await runDemoScenario(scenario);
     } finally {
-      setTimeout(() => setStarting(false), 1000);
+      setTimeout(() => setStarting(null), 1000);
     }
   };
 
   return (
     <div style={{ backgroundColor: "#0f172a", minHeight: "100vh", padding: "24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h1 style={{ color: "white", margin: 0 }}>⚡ VAJRA AI — Incident Control Plane</h1>
           <p style={{ color: "#94a3b8", marginTop: "5px" }}>DETECT → CORRELATE → DIAGNOSE → POLICY → APPROVE → EXECUTE → VERIFY → MEMORY</p>
         </div>
-        <Button variant="contained" color="error" onClick={startDemo} disabled={starting}>
-          {starting ? "Starting scenario…" : "Run Demo Scenario"}
-        </Button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <Button variant="contained" color="error" onClick={() => startDemo("checkout-incident")} disabled={!!starting}>
+            {starting === "checkout-incident" ? "Starting…" : "Run Deployment Incident"}
+          </Button>
+          <Button variant="contained" color="warning" onClick={() => startDemo("bot-attack-incident")} disabled={!!starting}>
+            {starting === "bot-attack-incident" ? "Starting…" : "Run Bot Attack Scenario"}
+          </Button>
+        </div>
       </div>
 
       <Paper style={panelStyle}>
@@ -58,7 +64,7 @@ export default function Dashboard() {
         </Typography>
         {incidents.length === 0 && (
           <Typography style={{ color: "#64748b" }}>
-            No incidents yet — click "Run Demo Scenario" to simulate the checkout-service production incident.
+            No incidents yet — click a scenario button above to simulate a production incident.
           </Typography>
         )}
         {incidents.map((incident) => (
@@ -89,7 +95,7 @@ export default function Dashboard() {
       </Paper>
 
       <Typography variant="overline" style={{ color: "#64748b" }}>
-        Roadmap preview — synthetic, not live data (Phase 2+)
+        Security intelligence &amp; business impact — live, backed by mock providers (real integrations are Phase 2+)
       </Typography>
       <div style={{ display: "flex", gap: "20px", marginTop: "10px", flexWrap: "wrap" }}>
         <Paper style={{ ...panelStyle, flex: 1, minWidth: "320px" }}>
@@ -97,6 +103,9 @@ export default function Dashboard() {
         </Paper>
         <Paper style={{ ...panelStyle, flex: 1, minWidth: "320px" }}>
           <BotThreatIntel />
+        </Paper>
+        <Paper style={{ ...panelStyle, flex: 1, minWidth: "260px" }}>
+          <RevenueImpact />
         </Paper>
       </div>
     </div>

@@ -11,5 +11,8 @@ export const approveIncident = (id, decided_by, comment) =>
   client.post(`/api/incidents/${id}/approve`, { decided_by, comment }).then((r) => r.data);
 export const rejectIncident = (id, decided_by, comment) =>
   client.post(`/api/incidents/${id}/reject`, { decided_by, comment }).then((r) => r.data);
-export const runDemoScenario = () => client.post("/api/demo/run-scenario", {}).then((r) => r.data);
+export const runDemoScenario = (scenario = "checkout-incident") => client.post("/api/demo/run-scenario", { scenario }).then((r) => r.data);
 export const getHealth = () => client.get("/api/health").then((r) => r.data);
+export const getSecurityTraffic = (service, environment) =>
+  client.get("/api/security/traffic", { params: { service, environment } }).then((r) => r.data);
+export const getBusinessImpact = () => client.get("/api/business-impact").then((r) => r.data);

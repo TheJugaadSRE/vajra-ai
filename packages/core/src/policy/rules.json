@@ -25,6 +25,12 @@
       "reason": "Scaling actions are low-risk and reversible; auto-approved even in production"
     },
     {
+      "id": "block-traffic-auto-allowed",
+      "match": { "action_type": "block_traffic" },
+      "decision": { "action_allowed": true, "requires_approval": false },
+      "reason": "Blocking flagged malicious IPs at the edge is non-destructive and reversible; auto-approved even in production"
+    },
+    {
       "id": "non-prod-auto-allowed",
       "match": { "environment": "qa|staging|dev", "action_type": "*" },
       "decision": { "action_allowed": true, "requires_approval": false },

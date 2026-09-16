@@ -5,6 +5,8 @@ import { IncidentStore } from "./memory/incidentStore";
 import { KnowledgeStore } from "./knowledge/store";
 import { ObservabilityProvider, MockObservabilityProvider } from "./providers/observability";
 import { DeploymentProvider } from "./providers/deployment";
+import { SecurityProvider } from "./providers/security";
+import { simulateAction } from "./simulation/digitalTwin";
 import { DetectionAgent } from "./agents/detectionAgent";
 import { DiagnosisAgent } from "./agents/diagnosisAgent";
 import { MitigationAgent } from "./agents/mitigationAgent";
@@ -22,6 +24,7 @@ export interface OrchestratorDeps {
   knowledge: KnowledgeStore;
   observability: ObservabilityProvider;
   deployment: DeploymentProvider;
+  security: SecurityProvider;
   reasoner: Reasoner;
 }
 
@@ -79,22 +82,39 @@ export class VajraOrchestrator {
     const incident = await this.deps.store.get(incidentId);
     if (!incident) return;
 
-    const ctx = buildToolContext(incident, this.deps.observability, this.deps.deployment, this.deps.knowledge, this.deps.store);
+    const ctx = buildToolContext(
+      incident,
+      this.deps.observability,
+      this.deps.deployment,
+      this.deps.security,
+      this.deps.knowledge,
+      this.deps.store
+    );
     const baselineMetrics = (await this.deps.observability.getMetrics(incident.service, incident.environment, 5)).reduce(
       (acc, m) => ({ ...acc, [m.metric]: m.value }),
       {} as Record<string, number>
     );
     const diagnosis = await this.diagnosisAgent.diagnose(incident, ctx, baselineMetrics);
+    const simulation = simulateAction(incident, diagnosis);
 
     const policyDecision = this.mitigationAgent.evaluate(incident.environment, diagnosis);
 
-    let updated = await this.incidentManager.patch(incidentId, { diagnosis, policy_decision: policyDecision });
+    let updated = await this.incidentManager.patch(incidentId, { diagnosis, simulation, policy_decision: policyDecision });
     updated = await this.incidentManager.appendTimeline(
       incidentId,
       "diagnosis",
       `Diagnosis complete: ${diagnosis.primary_hypothesis} (confidence: ${diagnosis.model_confidence}, evidence coverage: ${diagnosis.evidence_coverage})`,
       "agent",
       { diagnosis }
+    );
+    updated = await this.incidentManager.appendTimeline(
+      incidentId,
+      "simulation",
+      `Digital twin simulation: ${simulation.recommended_scenario} projected to reduce error rate to ~${
+        simulation.scenarios.find((s) => s.action === simulation.recommended_scenario)?.predicted_error_rate
+      }%`,
+      "agent",
+      { simulation }
     );
 
     if (diagnosis.recommended_action.type === "no_action") {
@@ -141,7 +161,7 @@ export class VajraOrchestrator {
   private async remediateAndVerify(incidentId: string): Promise<void> {
     const incident = await this.mustGet(incidentId);
     await this.incidentManager.updateStatus(incidentId, "REMEDIATING");
-    const executionRecord = await execute(incident, this.deps.deployment, this.deps.observability);
+    const executionRecord = await execute(incident, this.deps.deployment, this.deps.security, this.deps.observability);
     await this.incidentManager.patch(incidentId, { execution: executionRecord });
     await this.incidentManager.appendTimeline(incidentId, "execution", `${executionRecord.action}: ${executionRecord.status} — ${executionRecord.result}`, "agent");
 

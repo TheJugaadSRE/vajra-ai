@@ -48,4 +48,37 @@ describe("checkout-service demo scenario (end-to-end)", () => {
 
     fs.rmSync(storeFile, { force: true });
   }, 20000);
+
+  it("runs the bot-attack scenario end-to-end with policy auto-approval (no human approval needed)", async () => {
+    const storeFile = path.join(os.tmpdir(), `vajra-test-bot-${Date.now()}.json`);
+    const { app } = createApp(storeFile);
+
+    const startRes = await request(app).post("/api/demo/run-scenario").send({ scenario: "bot-attack-incident" });
+    expect(startRes.status).toBe(202);
+
+    let incidentId: string | null = null;
+    for (let i = 0; i < 40 && !incidentId; i++) {
+      await sleep(250);
+      const list = await request(app).get("/api/incidents");
+      if (list.body.length > 0) incidentId = list.body[0].incident_id;
+    }
+    expect(incidentId).not.toBeNull();
+
+    let status = "";
+    let detail: request.Response | null = null;
+    for (let i = 0; i < 40; i++) {
+      detail = await request(app).get(`/api/incidents/${incidentId}`);
+      status = detail.body.status;
+      if (["RESOLVED", "ESCALATED", "CLOSED"].includes(status)) break;
+      await sleep(250);
+    }
+
+    expect(detail!.body.diagnosis.recommended_action.type).toBe("block_traffic");
+    expect(detail!.body.policy_decision.requires_approval).toBe(false);
+    expect(detail!.body.simulation).not.toBeNull();
+    expect(status).toBe("RESOLVED");
+    expect(detail!.body.verification.status).toBe("RECOVERED");
+
+    fs.rmSync(storeFile, { force: true });
+  }, 20000);
 });

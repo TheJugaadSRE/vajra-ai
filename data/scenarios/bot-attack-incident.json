@@ -1,0 +1,33 @@
+{
+  "name": "Suspicious bot traffic spike on checkout-service",
+  "description": "A coordinated scraping/bot attack drives traffic and error rate up; VAJRA identifies the flagged IPs and auto-blocks them (low-risk, reversible action, no human approval required).",
+  "events": [
+    {
+      "delay_ms": 0,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "high",
+      "alert": "Suspicious traffic spike detected",
+      "source": "Dynatrace"
+    },
+    {
+      "delay_ms": 400,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "high",
+      "alert": "Bot signature match on inbound requests",
+      "source": "WAF"
+    },
+    {
+      "delay_ms": 400,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "critical",
+      "alert": "HTTP error rate increasing under load",
+      "source": "CloudWatch"
+    }
+  ]
+}

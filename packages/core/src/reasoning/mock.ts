@@ -2,6 +2,10 @@ import { Evidence, ToolCallLog } from "../schema";
 import { Tool, ToolContext } from "../tools/types";
 import { Reasoner, RawDiagnosis } from "./types";
 
+const SECURITY_SYMPTOM_PATTERN = /bot|ddos|scraping|suspicious traffic|traffic spike/i;
+
+type ToolCaller = (name: string, input?: Record<string, unknown>) => Promise<{ summary: string; data: unknown }>;
+
 /**
  * Runs the same real tools a Bedrock-backed agent would, in a fixed order,
  * then applies a small heuristic to turn the gathered evidence into a
@@ -14,7 +18,7 @@ export class MockReasoner implements Reasoner {
 
   async diagnose(ctx: ToolContext, tools: Map<string, Tool>): Promise<RawDiagnosis> {
     const toolCalls: ToolCallLog[] = [];
-    const call = async (name: string, input: Record<string, unknown> = {}) => {
+    const call: ToolCaller = async (name, input = {}) => {
       const tool = tools.get(name);
       if (!tool) throw new Error(`Unknown tool: ${name}`);
       const result = await tool.execute(input, ctx);
@@ -22,6 +26,105 @@ export class MockReasoner implements Reasoner {
       return result;
     };
 
+    const isSecurityIncident = SECURITY_SYMPTOM_PATTERN.test(ctx.incident.symptoms.join(" "));
+    return isSecurityIncident ? this.diagnoseSecurityIncident(ctx, call, toolCalls) : this.diagnoseDeploymentRegression(ctx, call, toolCalls);
+  }
+
+  private async diagnoseSecurityIncident(ctx: ToolContext, call: ToolCaller, toolCalls: ToolCallLog[]): Promise<RawDiagnosis> {
+    const traffic = await call("get_traffic_pattern");
+    const threatIntel = await call("get_threat_intel");
+    const metrics = await call("get_metrics");
+
+    const trafficPoints = (traffic.data as { time: string; requests_per_minute: number }[]) ?? [];
+    const suspiciousIps = (threatIntel.data as { ip: string; requests_per_minute: number; threat_score: number }[]) ?? [];
+    const metricList = (metrics.data as { metric: string; value: number }[]) ?? [];
+    const errorRate = metricList.find((m) => m.metric === "http_5xx_rate")?.value ?? 0;
+
+    const baseline = trafficPoints[0]?.requests_per_minute ?? 0;
+    const latest = trafficPoints[trafficPoints.length - 1]?.requests_per_minute ?? 0;
+    const spikeMultiple = baseline > 0 ? latest / baseline : 1;
+
+    const supporting_evidence: Evidence[] = [];
+    const contradicting_evidence: Evidence[] = [];
+    const missing_evidence: string[] = ["distributed trace (get_trace not available in this environment)"];
+
+    if (spikeMultiple > 3) {
+      supporting_evidence.push({
+        kind: "fact",
+        source_tool: "get_traffic_pattern",
+        summary: `Inbound traffic rose ${spikeMultiple.toFixed(1)}x over the last ~10 minutes (${baseline} -> ${latest} req/min)`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    if (suspiciousIps.length > 0) {
+      supporting_evidence.push({
+        kind: "fact",
+        source_tool: "get_threat_intel",
+        summary: `${suspiciousIps.length} source IPs flagged with high threat scores, top: ${suspiciousIps[0].ip} (score ${suspiciousIps[0].threat_score}, ${suspiciousIps[0].requests_per_minute} req/min)`,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      missing_evidence.push("no currently-flagged suspicious IPs — traffic pattern alone is not conclusive of an attack");
+    }
+    if (errorRate > 5) {
+      supporting_evidence.push({
+        kind: "fact",
+        source_tool: "get_metrics",
+        summary: `HTTP 5xx rate elevated at ${errorRate}% under the increased load`,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      contradicting_evidence.push({
+        kind: "fact",
+        source_tool: "get_metrics",
+        summary: `HTTP 5xx rate not yet elevated (${errorRate}%) despite the traffic spike`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const strongSignal = spikeMultiple > 3 && suspiciousIps.length > 0;
+
+    if (strongSignal) {
+      return {
+        supporting_evidence,
+        contradicting_evidence,
+        missing_evidence,
+        tool_calls: toolCalls,
+        primary_hypothesis: `Coordinated bot traffic from ${suspiciousIps.length} identified source IPs is driving the load spike on ${ctx.incident.service}`,
+        model_confidence: "medium",
+        evidence_coverage: "high",
+        alternative_hypotheses: [{ hypothesis: "Organic traffic surge (e.g. a marketing campaign)", confidence: "low" }],
+        recommended_action: {
+          type: "block_traffic",
+          target: { service: ctx.incident.service, environment: ctx.incident.environment },
+          params: { ips: suspiciousIps.map((ip) => ip.ip) },
+          rationale: `Block the ${suspiciousIps.length} flagged IPs at the edge — they account for the majority of the abnormal request volume and match known bot request signatures`,
+        },
+        risk: "low",
+        human_approval_required: false,
+      };
+    }
+
+    return {
+      supporting_evidence,
+      contradicting_evidence,
+      missing_evidence,
+      tool_calls: toolCalls,
+      primary_hypothesis: "Traffic pattern is anomalous but not conclusively malicious",
+      model_confidence: "low",
+      evidence_coverage: "medium",
+      alternative_hypotheses: [],
+      recommended_action: {
+        type: "no_action",
+        target: { service: ctx.incident.service, environment: ctx.incident.environment },
+        rationale: "Insufficient corroborating evidence (traffic spike without flagged IPs or error-rate impact) to justify blocking traffic",
+      },
+      risk: "low",
+      human_approval_required: false,
+    };
+  }
+
+  private async diagnoseDeploymentRegression(ctx: ToolContext, call: ToolCaller, toolCalls: ToolCallLog[]): Promise<RawDiagnosis> {
     const deployments = await call("get_recent_deployments", { since_minutes: 30 });
     const metrics = await call("get_metrics");
     const logs = await call("query_logs");

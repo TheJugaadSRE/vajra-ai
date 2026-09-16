@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "synth": "cdk synth",
     "diff": "cdk diff",
     "deploy": "cdk deploy --all"

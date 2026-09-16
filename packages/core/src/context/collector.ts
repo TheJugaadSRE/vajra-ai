@@ -1,6 +1,7 @@
 import { Incident } from "../schema";
 import { ObservabilityProvider } from "../providers/observability";
 import { DeploymentProvider } from "../providers/deployment";
+import { SecurityProvider } from "../providers/security";
 import { KnowledgeStore } from "../knowledge/store";
 import { IncidentStore } from "../memory/incidentStore";
 import { ToolContext } from "../tools/types";
@@ -16,10 +17,11 @@ export function buildToolContext(
   incident: Incident,
   observability: ObservabilityProvider,
   deployment: DeploymentProvider,
+  security: SecurityProvider,
   knowledge: KnowledgeStore,
   memory: IncidentStore
 ): ToolContext {
-  return { incident, observability, deployment, knowledge, memory };
+  return { incident, observability, deployment, security, knowledge, memory };
 }
 
 export { buildToolRegistry };

@@ -5,19 +5,22 @@ import {
   KnowledgeStore,
   MockDeploymentProvider,
   MockObservabilityProvider,
+  MockSecurityProvider,
   DiagnosisAgent,
   MitigationAgent,
   PolicyEngine,
   IncidentManager,
   buildToolContext,
   createReasoner,
+  simulateAction,
 } from "@vajra/core";
 
 const store = new DynamoIncidentStore(process.env.TABLE_NAME!);
 const knowledge = new KnowledgeStore(process.env.VAJRA_DATA_DIR);
-// Phase 2: swap these for DynatraceObservabilityProvider / ArgoCDDeploymentProvider etc.
+// Phase 2: swap these for DynatraceObservabilityProvider / ArgoCDDeploymentProvider / CloudflareSecurityProvider etc.
 const observability = new MockObservabilityProvider();
 const deployment = new MockDeploymentProvider();
+const security = new MockSecurityProvider();
 const incidentManager = new IncidentManager(store);
 const diagnosisAgent = new DiagnosisAgent(createReasoner());
 const mitigationAgent = new MitigationAgent(new PolicyEngine());
@@ -39,15 +42,16 @@ export const handler: SQSHandler = async (sqsEvent) => {
       observability.markDegraded(incident.service, incident.environment);
     }
 
-    const ctx = buildToolContext(incident, observability, deployment, knowledge, store);
+    const ctx = buildToolContext(incident, observability, deployment, security, knowledge, store);
     const baselineMetrics = (await observability.getMetrics(incident.service, incident.environment)).reduce(
       (acc, m) => ({ ...acc, [m.metric]: m.value }),
       {} as Record<string, number>
     );
     const diagnosis = await diagnosisAgent.diagnose(incident, ctx, baselineMetrics);
+    const simulation = simulateAction(incident, diagnosis);
     const policyDecision = mitigationAgent.evaluate(incident.environment, diagnosis);
 
-    await incidentManager.patch(incident_id, { diagnosis, policy_decision: policyDecision });
+    await incidentManager.patch(incident_id, { diagnosis, simulation, policy_decision: policyDecision });
     await incidentManager.appendTimeline(
       incident_id,
       "diagnosis",
