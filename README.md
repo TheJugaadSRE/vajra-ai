@@ -74,6 +74,30 @@ AWS_REGION=us-east-1
 
 (and make sure your environment has AWS credentials with `bedrock:InvokeModel` on that model).
 
+## Deploying a public demo (Render + Vercel, free)
+
+If you want a permanent public URL you can open from any device — not just `localhost` on your own machine — deploy the backend to [Render](https://render.com) and the frontend to [Vercel](https://vercel.com). Both connect directly to this GitHub repo and redeploy automatically on every push. Neither step needs anything beyond what's already in this repo.
+
+**⚠️ No authentication.** The API has zero auth. Anyone with the public URL can trigger demo scenarios or approve/reject incidents. That's fine for a demo — it's all mock data, nothing real gets touched — but don't treat this as a real deployment without adding auth first.
+
+**1. Backend on Render:**
+1. Go to [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**.
+2. Connect your GitHub account and select this repo. Render will detect `render.yaml` at the repo root and configure everything (build command, start command, health check) automatically.
+3. Click **Apply**. First build takes a few minutes.
+4. Once live, note the URL Render gives you — something like `https://vajra-api.onrender.com`.
+
+Render's free plan spins the service down after 15 minutes of inactivity — the first request after a quiet period takes ~30-50 seconds to wake back up. That's expected, not a bug.
+
+**2. Frontend on Vercel:**
+1. Go to [vercel.com/new](https://vercel.com/new), connect GitHub, and import this repo.
+2. In the project's configuration screen, set **Root Directory** to `apps/web` (Vercel auto-detects it as a Create React App from there).
+3. Add an environment variable: `REACT_APP_API_BASE` = the Render URL from step 1 (e.g. `https://vajra-api.onrender.com`, no trailing slash).
+4. Deploy.
+
+You'll get a URL like `https://vajra-ai.vercel.app` that works from any laptop, phone, or network — including direct links to a specific incident (e.g. `.../incident/INC-98F3B485`), which needed a small fix (`apps/web/vercel.json`'s SPA rewrite rule, and removing a `homepage: "."` setting left over from the original hackathon repo that broke asset loading on deep links).
+
+If you ever change the backend URL, just update the `REACT_APP_API_BASE` env var in Vercel and redeploy (CRA bakes env vars in at build time, so a redeploy is required — restarting alone won't pick up the change).
+
 ## Tests
 
 ```bash

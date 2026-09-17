@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: vajra-api
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build -w packages/core && npm run build -w services/api-local
+    startCommand: npm run start -w services/api-local
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: VAJRA_BEDROCK_MODE
+        value: mock
