@@ -54,9 +54,14 @@ export class VajraOrchestrator {
     const event = normalizeAlert(payload);
     const { incident } = await this.detectionAgent.detect(event);
 
-    // A production incident degrades the mock's simulated metrics so the
-    // diagnosis agent has real (if synthetic) evidence to find.
-    if (this.deps.observability instanceof MockObservabilityProvider) {
+    // A reactive incident (a real alert) degrades the mock's simulated
+    // metrics so the diagnosis agent has real (if synthetic) evidence to
+    // find. A predictive/proactive investigation (see prediction/) is
+    // different by design — nothing has actually broken yet, that's the
+    // whole point of catching it early — so it must NOT flip metrics to
+    // "degraded", or verification would nonsensically fail a fix that was
+    // never needed to begin with.
+    if (this.deps.observability instanceof MockObservabilityProvider && event.event_type !== "PREDICTED_FAILURE") {
       this.deps.observability.markDegraded(incident.service, incident.environment);
     }
 

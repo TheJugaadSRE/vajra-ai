@@ -10,6 +10,7 @@ import path from "path";
 
 export interface ApiStackProps extends StackProps {
   incidentsTable: dynamodb.Table;
+  predictionsTable: dynamodb.Table;
   eventBus: events.EventBus;
   approvalCallbackFn: lambdaNode.NodejsFunction;
 }
@@ -80,6 +81,15 @@ export class ApiStack extends Stack {
     incident.addResource("similar").addMethod("GET", new apigateway.LambdaIntegration(getSimilarFn));
     incident.addResource("approve").addMethod("POST", new apigateway.LambdaIntegration(props.approvalCallbackFn));
     incident.addResource("reject").addMethod("POST", new apigateway.LambdaIntegration(props.approvalCallbackFn));
+
+    // Read-only — see lambda/listPredictions.ts for why investigate/dismiss aren't exposed here yet.
+    const listPredictionsFn = new lambdaNode.NodejsFunction(this, "ListPredictionsFn", {
+      ...nodeJsFnDefaults,
+      entry: path.join(LAMBDA_DIR, "listPredictions.ts"),
+      environment: { PREDICTIONS_TABLE_NAME: props.predictionsTable.tableName },
+    });
+    props.predictionsTable.grantReadData(listPredictionsFn);
+    this.api.root.addResource("predictions").addMethod("GET", new apigateway.LambdaIntegration(listPredictionsFn));
 
     this.userPool = new cognito.UserPool(this, "VajraUserPool", {
       userPoolName: "vajra-ai-users",

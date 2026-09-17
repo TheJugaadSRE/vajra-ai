@@ -12,6 +12,7 @@ import { Construct } from "constructs";
  */
 export class DataStack extends Stack {
   public readonly incidentsTable: dynamodb.Table;
+  public readonly predictionsTable: dynamodb.Table;
   public readonly knowledgeBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -22,6 +23,17 @@ export class DataStack extends Stack {
       partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    // Separate from incidentsTable rather than sharing a single-table design with
+    // it: DynamoIncidentStore.list()/findSimilar() Scan the whole table assuming
+    // every item is an Incident, so mixing Prediction items in would silently
+    // corrupt those reads.
+    this.predictionsTable = new dynamodb.Table(this, "PredictionsTable", {
+      tableName: "vajra-predictions",
+      partitionKey: { name: "prediction_id", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
     });
 

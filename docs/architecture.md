@@ -32,6 +32,7 @@ data/                 service catalog, runbooks, and the checkout-service demo s
 | Diagnosis Agent | `packages/core/src/agents/diagnosisAgent.ts` + `reasoning/` | Drives a tool-use loop (mock or real Bedrock) to produce a structured, schema-validated `DiagnosisResult` |
 | Tools | `packages/core/src/tools/registry.ts` | `get_metrics`, `query_logs`, `get_recent_deployments`, `get_service_dependencies`, `get_runbook`, `get_similar_incidents`, `get_service_owner`, `get_oncall`, `get_traffic_pattern`, `get_threat_intel` — real calls against providers, never fabricated |
 | Digital Twin simulation | `packages/core/src/simulation/digitalTwin.ts` | A deterministic heuristic projection of predicted error rate/latency/cost for each candidate action, computed right after diagnosis and shown before approval — explicitly labeled as a heuristic model, not a trained model or a live topology replica |
+| Predictive Failure Engine | `packages/core/src/prediction/` | Fits a linear trend to recent metric history per watched metric/service and forecasts a threshold breach — statistical trend extrapolation, not a trained model (see dedicated section below) |
 | Policy Engine | `packages/core/src/policy/engine.ts` + `rules.json` | The only thing that decides whether an action is allowed / needs approval. The model never decides this |
 | Mitigation Agent | `packages/core/src/agents/mitigationAgent.ts` | Bridges Diagnosis's recommendation to the Policy Engine's decision |
 | Approval workflow | `packages/core/src/workflow/approval.ts` | Small explicit state machine: PENDING -> APPROVED/REJECTED, exactly once |
@@ -80,7 +81,11 @@ API Gateway -> ingestLambda -> EventBridge (vajra-incidents) -> SQS (+DLQ) -> or
 
 Also provisioned: S3 (knowledge/eval assets), Secrets Manager placeholders (Dynatrace/Jira keys, unused until Phase 2), an SNS topic for approval notifications, CloudWatch alarms on Lambda errors and state-machine failures, and a Cognito User Pool.
 
-**Known, deliberate gap:** the AWS Lambda handlers still use the same in-memory `MockObservabilityProvider`/`MockDeploymentProvider` as local dev. Its "degraded/recovered" health state lives in a single process's memory, so it does not survive across separate Lambda invocations — a real deployment replaces these with `DynatraceObservabilityProvider`/`ArgoCDDeploymentProvider` (Phase 2), which don't have this limitation. This is called out rather than silently papered over.
+**Predictive Failure Engine, separately:** an EventBridge Schedule Rule runs `predict.ts` every 5 minutes; it hydrates `PredictiveEngine` from a dedicated `vajra-predictions` DynamoDB table (kept separate from `vajra-incidents` — the incident store's `Scan`-based `list()`/`findSimilar()` assume every item is an Incident, so mixing Prediction items into the same table would silently corrupt those reads), re-scans, and writes the results back. `GET /predictions` (`listPredictions.ts`) reads that table. Promoting a prediction into an incident (investigate/dismiss) is **not** wired up in AWS yet — that needs the same hydrate-then-persist pattern applied to a request-driven Lambda instead of a scheduled one, which hasn't been built. `predict.ts`'s watch list also comes from a `WATCHED_SERVICES` env var rather than the knowledge service catalog, for the reason below.
+
+**Known, deliberate gap:** the AWS Lambda handlers still use the same in-memory `MockObservabilityProvider`/`MockDeploymentProvider`/`MockSecurityProvider` as local dev. Their mutable state (health, blocked-traffic, etc.) lives in a single process's memory, so it does not survive across separate Lambda invocations — a real deployment replaces these with real providers (Phase 2), which don't have this limitation. This is called out rather than silently papered over.
+
+**Also a known gap:** `KnowledgeStore`'s local JSON/Markdown files under `data/` are not bundled into any Lambda's deployment package — esbuild only bundles the JS/TS reachable from each entry file, not arbitrary asset directories. The S3 "knowledge/eval assets" bucket is provisioned but nothing uploads to it or reads from it yet. Any Lambda that calls `KnowledgeStore.getServiceCatalogEntry()`/`getRunbook()`/`listServiceNames()` (e.g. `orchestrate.ts`) would fail at runtime today; `predict.ts` sidesteps this with an env-var watch list specifically because of this gap.
 
 **Also not wired up yet:** the Cognito User Pool exists in the stack but no API route requires authentication. The local demo API has no auth at all. Do not expose either as-is to an untrusted network.
 
@@ -103,11 +108,23 @@ Implementing Phase 2 for any one of these means writing one class, not touching 
 
 The dashboard's traffic chart, threat-intel list, and revenue-protection panel are fed by real endpoints (`GET /api/security/traffic`, `GET /api/business-impact`) backed by these mock providers — they are live, not the earlier "synthetic Roadmap Preview" placeholder, though "live" here still means "live against a mock," not a real WAF/Dynatrace/Cloudflare integration.
 
+## The third scenario: catching a failure before it happens
+
+Unlike the other two (both reactive — an alert already fired), the Predictive Failure Engine runs on metric *history*, not a live symptom:
+
+1. `MockObservabilityProvider.getMetricHistory()` returns a synthetic time series — flat/stable for every service/metric except `payment-service`'s `db_connection_pool_available`, which drains roughly linearly (one of `payment-service`'s documented `known_failure_modes`).
+2. `packages/core/src/prediction/forecast.ts` fits an ordinary-least-squares line to that history and projects when it would cross a threshold (5 connections remaining). `confidence` is derived only from R² (how well the line fits) — it is not a probability of a real-world outage.
+3. `PredictiveEngine.scan()` (`packages/core/src/prediction/predictiveEngine.ts`) runs this per watched metric/service and surfaces a `Prediction` (status `WARNING`) when the forecast breach falls within a 90-minute horizon. `GET /api/predictions` triggers a scan on demand in local dev; the AWS design (below) runs it on a 5-minute schedule instead.
+4. Clicking **Investigate now** doesn't create a separate "prediction remediation" path — it synthesizes an alert (`eventType: "PREDICTED_FAILURE"`) and feeds it into the *exact same* `ingestRawAlert` pipeline as a real alert, reusing every downstream piece (diagnosis, policy, approval, execution, verification) unchanged. `MockReasoner` recognizes the `"trending toward"` symptom text and investigates differently from a live incident: it treats the forecast itself as the (hypothesis-kind) supporting evidence, honestly logs currently-healthy metrics as *contradicting* evidence, and recommends a proactive `restart_service` — which still requires approval in production under the same `prod-restart-tier1-requires-approval` policy rule the deployment-rollback scenario uses, no new rule needed.
+5. Because nothing was actually broken yet, `VerificationAgent` had to change: it now checks whether post-remediation metrics are within absolute healthy thresholds (`http_5xx_rate <= 5%`, `p99_latency <= 1000ms`) rather than "did they improve by 50%" — a proactive fix correctly reports `RECOVERED` even though before/after metrics are identical (they were already healthy).
+6. A `Prediction` that's been promoted stays `INVESTIGATING` (linked to its incident) across rescans rather than being re-flagged as a fresh warning; an engineer can also `DISMISS` one they've judged not worth acting on.
+
 ## What's explicitly NOT built (roadmap, not silently missing)
 
 - Real Dynatrace/CloudWatch/Jira/ServiceNow/Slack/Teams/Kubernetes/ArgoCD/Cloudflare/AWS WAF integrations (Phase 2)
 - Vector-based knowledge retrieval / Bedrock Knowledge Bases (Phase 2) — today's knowledge base is local JSON/Markdown with keyword lookup
-- Predictive Failure forecasting (time-series-based prediction of *future* failures) and real behavioral/ML-based bot detection — the Digital Twin simulation and Security Intelligence panel described above are deterministic heuristics against mock data, not trained models
+- Real behavioral/ML-based bot detection and any trained-model forecasting — the Digital Twin simulation and Predictive Failure Engine described above are both deterministic heuristics/statistics against mock data, not trained models
 - RBAC, multi-tenant isolation, real authentication (Phase 3)
 - Evaluation framework against a historical incident corpus (Phase 3)
 - AgentCore Gateway/MCP tool connectivity (Phase 3) — the current tool layer is a plain in-process registry, which is the right scope for one process talking to mock providers
+- Promoting a prediction into an incident (investigate/dismiss) via the deployed AWS API — only the scheduled forecast + read endpoint are wired up there (see below); local dev has the full read/write flow

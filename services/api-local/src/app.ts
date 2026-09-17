@@ -8,6 +8,7 @@ import {
   MockObservabilityProvider,
   MockDeploymentProvider,
   MockSecurityProvider,
+  PredictiveEngine,
   createReasoner,
 } from "@vajra/core";
 import { registerEventRoutes } from "./routes/events";
@@ -15,6 +16,7 @@ import { registerIncidentRoutes } from "./routes/incidents";
 import { registerDemoRoutes } from "./routes/demo";
 import { registerSecurityRoutes } from "./routes/security";
 import { registerBusinessImpactRoutes } from "./routes/businessImpact";
+import { registerPredictionRoutes } from "./routes/predictions";
 
 export interface AppHandle {
   app: Express;
@@ -35,6 +37,7 @@ export function createApp(storeFilePath?: string): AppHandle {
   const deployment = new MockDeploymentProvider();
   const security = new MockSecurityProvider();
   const reasoner = createReasoner();
+  const predictiveEngine = new PredictiveEngine(observability);
 
   const orchestrator = new VajraOrchestrator({ store, knowledge, observability, deployment, security, reasoner });
   const startedAt = new Date().toISOString();
@@ -44,6 +47,7 @@ export function createApp(storeFilePath?: string): AppHandle {
   registerDemoRoutes(app, orchestrator, knowledge);
   registerSecurityRoutes(app, orchestrator, security);
   registerBusinessImpactRoutes(app, orchestrator, knowledge);
+  registerPredictionRoutes(app, predictiveEngine, knowledge, orchestrator);
 
   app.get("/api/health", async (_req, res) => {
     const incidents = await orchestrator.listIncidents();

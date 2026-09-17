@@ -3,6 +3,7 @@ import { Tool, ToolContext } from "../tools/types";
 import { Reasoner, RawDiagnosis } from "./types";
 
 const SECURITY_SYMPTOM_PATTERN = /bot|ddos|scraping|suspicious traffic|traffic spike/i;
+const PREDICTIVE_SYMPTOM_PATTERN = /predictive engine|trending toward/i;
 
 type ToolCaller = (name: string, input?: Record<string, unknown>) => Promise<{ summary: string; data: unknown }>;
 
@@ -26,8 +27,64 @@ export class MockReasoner implements Reasoner {
       return result;
     };
 
-    const isSecurityIncident = SECURITY_SYMPTOM_PATTERN.test(ctx.incident.symptoms.join(" "));
-    return isSecurityIncident ? this.diagnoseSecurityIncident(ctx, call, toolCalls) : this.diagnoseDeploymentRegression(ctx, call, toolCalls);
+    const symptomText = ctx.incident.symptoms.join(" ");
+    if (PREDICTIVE_SYMPTOM_PATTERN.test(symptomText)) return this.diagnosePredictiveWarning(ctx, call, toolCalls);
+    if (SECURITY_SYMPTOM_PATTERN.test(symptomText)) return this.diagnoseSecurityIncident(ctx, call, toolCalls);
+    return this.diagnoseDeploymentRegression(ctx, call, toolCalls);
+  }
+
+  /**
+   * Triggered when an engineer promotes a Predictive Failure Engine warning
+   * into a real investigation (see prediction/predictiveEngine.ts) — there is
+   * no customer-facing symptom yet, only a forecast, so the evidence here
+   * looks different: the "supporting evidence" is the trend itself, and
+   * healthy current metrics are honestly logged as contradicting evidence.
+   */
+  private async diagnosePredictiveWarning(ctx: ToolContext, call: ToolCaller, toolCalls: ToolCallLog[]): Promise<RawDiagnosis> {
+    const metrics = await call("get_metrics");
+    await call("get_recent_deployments", { since_minutes: 60 });
+    await call("get_service_owner");
+
+    const metricList = (metrics.data as { metric: string; value: number }[]) ?? [];
+    const errorRate = metricList.find((m) => m.metric === "http_5xx_rate")?.value ?? 0;
+
+    const supporting_evidence: Evidence[] = [
+      {
+        kind: "hypothesis",
+        source_tool: "predictive_engine",
+        summary: ctx.incident.symptoms[ctx.incident.symptoms.length - 1],
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    const contradicting_evidence: Evidence[] = [];
+    if (errorRate < 5) {
+      contradicting_evidence.push({
+        kind: "fact",
+        source_tool: "get_metrics",
+        summary: `Current HTTP 5xx rate is still normal (${errorRate}%) — no customer-facing impact yet`,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return {
+      supporting_evidence,
+      contradicting_evidence,
+      missing_evidence: [
+        "no live customer-facing symptoms yet — this is a proactive investigation triggered by a forecast, not an active incident",
+      ],
+      tool_calls: toolCalls,
+      primary_hypothesis: `${ctx.incident.symptoms[0]} — acting proactively before it becomes customer-facing`,
+      model_confidence: "medium",
+      evidence_coverage: "medium",
+      alternative_hypotheses: [{ hypothesis: "Trend self-corrects without intervention", confidence: "low" }],
+      recommended_action: {
+        type: "restart_service",
+        target: { service: ctx.incident.service, environment: ctx.incident.environment },
+        rationale: "Proactively restart to reset the leaking resource before it exhausts and causes real customer impact",
+      },
+      risk: ctx.incident.environment === "production" ? "medium" : "low",
+      human_approval_required: ctx.incident.environment === "production",
+    };
   }
 
   private async diagnoseSecurityIncident(ctx: ToolContext, call: ToolCaller, toolCalls: ToolCallLog[]): Promise<RawDiagnosis> {

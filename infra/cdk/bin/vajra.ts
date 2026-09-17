@@ -22,12 +22,14 @@ const dataStack = new DataStack(app, "VajraDataStack", { env });
 const orchestrationStack = new OrchestrationStack(app, "VajraOrchestrationStack", {
   env,
   incidentsTable: dataStack.incidentsTable,
+  predictionsTable: dataStack.predictionsTable,
   bedrockModelArn,
 });
 
 new ApiStack(app, "VajraApiStack", {
   env,
   incidentsTable: dataStack.incidentsTable,
+  predictionsTable: dataStack.predictionsTable,
   eventBus: orchestrationStack.eventBus,
   approvalCallbackFn: orchestrationStack.approvalCallbackFn,
 });

@@ -14,20 +14,28 @@ DETECT -> CORRELATE -> COLLECT CONTEXT -> DIAGNOSE -> RECOMMEND -> POLICY CHECK
 
 ## What's actually built (Phase 1 MVP)
 
-A complete, locally runnable, end-to-end incident journey for a production `checkout-service` scenario:
+A complete, locally runnable, end-to-end incident journey, in three flavors that exercise different parts of the pipeline:
 
-1. An alert (or five correlated alerts) comes in.
-2. Deterministic correlation groups them into one incident — not one investigation per alert.
-3. A Diagnosis Agent runs a real tool-use loop (mock reasoner by default; a real Amazon Bedrock Converse API loop if you configure AWS credentials) against mock observability/deployment providers, producing a structured diagnosis with cited evidence, contradicting evidence, and honestly-labeled confidence.
+1. **Production deployment rollback** (`checkout-service`) — five correlated alerts, diagnosis correctly blames a recent bad deploy, recommends a rollback that **requires human approval** in production, then verifies recovery.
+2. **Bot traffic attack** (`checkout-service`) — diagnosis identifies flagged malicious IPs from a traffic spike and recommends blocking them, a low-risk/reversible action that's **auto-approved by policy** — no human in the loop.
+3. **Predictive, proactive** (`payment-service`) — the Predictive Failure Engine forecasts a connection-pool exhaustion *before* any alert fires (statistical trend extrapolation on metric history), and an engineer can promote that forecast into a real investigation that recommends a proactive restart.
+
+The shared pipeline, regardless of which scenario:
+
+1. Deterministic correlation groups related alerts into one incident — not one investigation per alert.
+2. A Diagnosis Agent runs a real tool-use loop (mock reasoner by default; a real Amazon Bedrock Converse API loop if you configure AWS credentials) against mock providers, producing a structured diagnosis with cited evidence, contradicting evidence, and honestly-labeled confidence.
+3. A Digital Twin simulation projects predicted error rate/latency/cost for each candidate action (a deterministic heuristic, not a trained model) before anything runs.
 4. A Policy Engine — not the model — decides whether the recommended action is auto-allowed or needs human approval.
 5. If approval is required, the Incident Detail page shows an Approve/Reject panel.
-6. On approval, an Execution layer re-validates the action and dispatches it (simulated ArgoCD rollback).
-7. A Verification Agent re-checks metrics before declaring the incident resolved.
+6. On approval (or automatically, if policy allows), an Execution layer re-validates the action and dispatches it.
+7. A Verification Agent checks whether the metrics that motivated the action are actually healthy now — never assumes success just because the action ran.
 8. The incident is persisted and searchable for similarity against future incidents.
 
-AWS infrastructure-as-code for the same pipeline (API Gateway, EventBridge, SQS, Step Functions, DynamoDB, Bedrock IAM, Cognito, CloudWatch alarms) is written in `infra/cdk` and `cdk synth`-verified, but **not deployed** — see [docs/architecture.md](docs/architecture.md) for the known gaps in that path (mock providers don't share state across Lambda invocations; no auth wired up yet).
+The dashboard also has live (mock-backed, not fabricated) Security Intelligence, Business Impact, and Predictive Failure Engine panels — see [docs/architecture.md](docs/architecture.md) for exactly what's real vs. illustrative in each.
 
-What's *not* built yet — real Dynatrace/Slack/ServiceNow integrations, digital twin simulation, predictive ML, RBAC/multi-tenant — is listed explicitly in [docs/architecture.md](docs/architecture.md) rather than silently missing.
+AWS infrastructure-as-code for the same pipeline (API Gateway, EventBridge, SQS, Step Functions, DynamoDB, Bedrock IAM, Cognito, CloudWatch alarms, a scheduled Lambda for predictive forecasting) is written in `infra/cdk` and `cdk synth`-verified, but **not deployed** — see [docs/architecture.md](docs/architecture.md) for the known gaps in that path (mock providers don't share state across Lambda invocations; `data/` isn't bundled into any Lambda yet; no auth wired up yet).
+
+What's *not* built yet — real Dynatrace/Slack/ServiceNow/Cloudflare integrations, RBAC/multi-tenant, a real evaluation framework — is listed explicitly in [docs/architecture.md](docs/architecture.md) rather than silently missing.
 
 ## Repository layout
 
@@ -53,7 +61,7 @@ This starts, concurrently:
 - the API on `http://localhost:4000`
 - the React app on `http://localhost:3000`
 
-Open `http://localhost:3000`, click **Run Demo Scenario**, and watch the incident move through the pipeline. When it reaches `AWAITING_APPROVAL`, click **Approve rollback** and watch it resolve.
+Open `http://localhost:3000`. Click **Run Deployment Incident** or **Run Bot Attack Scenario** and watch the incident move through the pipeline (approve it if it reaches `AWAITING_APPROVAL`) — or click **Investigate now** on a Predictive Failure Engine warning to promote a forecast into a real investigation.
 
 By default everything runs against mock providers and a mock reasoner — no AWS account or credentials needed. To use a real Amazon Bedrock model for diagnosis instead:
 
@@ -72,7 +80,7 @@ AWS_REGION=us-east-1
 npm test
 ```
 
-Runs `packages/core`'s unit tests (correlation, policy, mock-reasoner diagnosis) and `services/api-local`'s end-to-end test, which drives the full demo scenario through HTTP and asserts the incident reaches `RESOLVED`.
+Runs `packages/core`'s unit tests (correlation, policy, forecasting math, mock-reasoner diagnosis for all three scenario types), `services/api-local`'s end-to-end tests (all three scenarios driven through real HTTP calls, asserting they reach `RESOLVED`), and a full `infra/cdk` type-check.
 
 ## AWS deployment (infra/cdk)
 

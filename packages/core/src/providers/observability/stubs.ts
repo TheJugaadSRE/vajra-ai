@@ -1,9 +1,10 @@
-import { LogLine, MetricPoint, ObservabilityProvider, TraceSummary } from "./types";
+import { LogLine, MetricHistoryPoint, MetricPoint, ObservabilityProvider, TraceSummary } from "./types";
 
 /**
- * Phase 2 integration points. Implement `getMetrics`/`queryLogs`/`getTrace`
- * against the real API and these become drop-in replacements for
- * MockObservabilityProvider — nothing else in the codebase needs to change.
+ * Phase 2 integration points. Implement `getMetrics`/`queryLogs`/`getTrace`/
+ * `getMetricHistory` against the real API and these become drop-in
+ * replacements for MockObservabilityProvider — nothing else in the codebase
+ * needs to change.
  */
 class NotImplementedObservabilityProvider implements ObservabilityProvider {
   constructor(public name: string) {}
@@ -17,6 +18,10 @@ class NotImplementedObservabilityProvider implements ObservabilityProvider {
   }
 
   async getTrace(): Promise<TraceSummary | null> {
+    throw new Error(`${this.name} integration not implemented yet (Phase 2)`);
+  }
+
+  async getMetricHistory(): Promise<MetricHistoryPoint[]> {
     throw new Error(`${this.name} integration not implemented yet (Phase 2)`);
   }
 }

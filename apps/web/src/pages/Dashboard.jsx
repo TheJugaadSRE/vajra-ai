@@ -6,6 +6,7 @@ import { SEVERITY_COLOR, SEVERITY_LABEL, STATUS_COLOR } from "../statusColors";
 import BotAttackChart from "../components/BotAttackChart";
 import BotThreatIntel from "../components/BotThreatIntel";
 import RevenueImpact from "../components/RevenueImpact";
+import PredictiveFailureCard from "../components/PredictiveFailureCard";
 
 const panelStyle = {
   padding: "18px",
@@ -92,6 +93,10 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         ))}
+      </Paper>
+
+      <Paper style={panelStyle}>
+        <PredictiveFailureCard />
       </Paper>
 
       <Typography variant="overline" style={{ color: "#64748b" }}>

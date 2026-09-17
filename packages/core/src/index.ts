@@ -10,6 +10,8 @@ export * from "./providers/deployment";
 export * from "./providers/security";
 export * from "./providers/ticketing";
 export * from "./simulation/digitalTwin";
+export * from "./prediction/forecast";
+export * from "./prediction/predictiveEngine";
 export * from "./reasoning";
 export * from "./agents";
 export * from "./policy/engine";

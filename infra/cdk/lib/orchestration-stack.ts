@@ -16,6 +16,7 @@ import path from "path";
 
 export interface OrchestrationStackProps extends StackProps {
   incidentsTable: dynamodb.Table;
+  predictionsTable: dynamodb.Table;
   bedrockModelArn: string;
 }
 
@@ -197,6 +198,19 @@ export class OrchestrationStack extends Stack {
       threshold: 1,
       evaluationPeriods: 1,
       alarmDescription: "VAJRA incident remediation state machine failed",
+    });
+
+    // --- Predictive Failure Engine: scheduled forecast, see lambda/predict.ts ---
+    const predictFn = new lambdaNode.NodejsFunction(this, "PredictFn", {
+      ...nodeJsFnDefaults,
+      entry: path.join(LAMBDA_DIR, "predict.ts"),
+      environment: { PREDICTIONS_TABLE_NAME: props.predictionsTable.tableName },
+    });
+    props.predictionsTable.grantReadWriteData(predictFn);
+
+    new events.Rule(this, "PredictiveScanSchedule", {
+      schedule: events.Schedule.rate(Duration.minutes(5)),
+      targets: [new targets.LambdaFunction(predictFn)],
     });
   }
 }

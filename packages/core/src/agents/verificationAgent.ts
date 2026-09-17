@@ -1,14 +1,19 @@
 import { Incident, VerificationResult } from "../schema";
 import { ObservabilityProvider } from "../providers/observability";
 
-const KEY_METRICS = ["http_5xx_rate", "p99_latency"];
-/** A metric counts as recovered if it dropped to at most this fraction of its pre-remediation value. */
-const RECOVERY_THRESHOLD_RATIO = 0.5;
+/** A metric counts as healthy if it's at or below this absolute value after remediation. */
+const HEALTHY_THRESHOLDS: Record<string, number> = {
+  http_5xx_rate: 5,
+  p99_latency: 1000,
+};
 
 /**
  * Never assume a remediation worked just because it ran (section 18). This
  * re-queries the same observability provider the Diagnosis Agent used and
- * compares before/after on the metrics that actually motivated the action.
+ * checks whether the metrics that motivated the action are healthy now —
+ * an absolute check, not "did it improve by X%", because a *proactive*
+ * remediation (see prediction/predictiveEngine.ts) can correctly leave
+ * already-healthy metrics unchanged and still count as a success.
  */
 export class VerificationAgent {
   constructor(private observability: ObservabilityProvider) {}
@@ -18,19 +23,15 @@ export class VerificationAgent {
     const metrics_after: Record<string, number> = {};
     for (const point of afterPoints) metrics_after[point.metric] = point.value;
 
-    const recoveredFlags = KEY_METRICS.map((metric) => {
-      const before = metricsBefore[metric];
-      const after = metrics_after[metric];
-      if (before === undefined || after === undefined) return null;
-      return after <= before * RECOVERY_THRESHOLD_RATIO;
-    }).filter((v): v is boolean => v !== null);
+    const healthyFlags = Object.entries(HEALTHY_THRESHOLDS)
+      .map(([metric, threshold]) => {
+        const after = metrics_after[metric];
+        if (after === undefined) return null;
+        return after <= threshold;
+      })
+      .filter((v): v is boolean => v !== null);
 
-    const status =
-      recoveredFlags.length === 0
-        ? "INCONCLUSIVE"
-        : recoveredFlags.every(Boolean)
-        ? "RECOVERED"
-        : "NOT_RECOVERED";
+    const status = healthyFlags.length === 0 ? "INCONCLUSIVE" : healthyFlags.every(Boolean) ? "RECOVERED" : "NOT_RECOVERED";
 
     return {
       status,

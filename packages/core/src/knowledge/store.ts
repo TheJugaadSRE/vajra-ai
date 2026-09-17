@@ -31,6 +31,16 @@ export class KnowledgeStore {
     return JSON.parse(fs.readFileSync(file, "utf-8"));
   }
 
+  /** Service names for everything in the local catalog — used by the Predictive Failure Engine to know what to scan. */
+  listServiceNames(): string[] {
+    const dir = path.join(this.dataDir, "knowledge", "services");
+    if (!fs.existsSync(dir)) return [];
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.replace(/\.json$/, ""));
+  }
+
   getRunbook(runbookId: string): string | null {
     const file = path.join(this.dataDir, "knowledge", "runbooks", `${runbookId}.md`);
     if (!fs.existsSync(file)) return null;
