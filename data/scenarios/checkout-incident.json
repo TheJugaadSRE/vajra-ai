@@ -1,0 +1,51 @@
+{
+  "name": "checkout-service production incident",
+  "description": "Deployment v1.4.82 introduces a connection pool regression; alerts fire in sequence, each delay_ms after the previous one, compressed for a live demo.",
+  "events": [
+    {
+      "delay_ms": 0,
+      "eventType": "DEPLOYMENT",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "low",
+      "alert": "Deployment v1.4.82 completed",
+      "source": "ArgoCD"
+    },
+    {
+      "delay_ms": 500,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "high",
+      "alert": "Connection timeout errors increasing",
+      "source": "Dynatrace"
+    },
+    {
+      "delay_ms": 500,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "critical",
+      "alert": "HTTP 500 spike",
+      "source": "Dynatrace"
+    },
+    {
+      "delay_ms": 500,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "high",
+      "alert": "Latency increase (p99 > 2.5s)",
+      "source": "CloudWatch"
+    },
+    {
+      "delay_ms": 500,
+      "eventType": "ALERT_TRIGGERED",
+      "service": "checkout-service",
+      "environment": "production",
+      "severity": "low",
+      "alert": "CPU utilization normal",
+      "source": "CloudWatch"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "service": "payment-service",
+  "owner": "Payments Team",
+  "oncall": "payments-oncall@vajra.example (PagerDuty: payments-primary)",
+  "criticality": "tier-1",
+  "revenue_per_minute_downtime_usd": 6800,
+  "dependencies": [
+    { "service": "payment-db", "type": "sync", "criticality": "critical" },
+    { "service": "kafka-payment-events", "type": "async", "criticality": "high" }
+  ],
+  "known_failure_modes": [
+    "connection pool exhaustion",
+    "Kafka consumer lag",
+    "DB deadlocks"
+  ],
+  "deployment_system": "ArgoCD",
+  "runbook": "rollback-payment-v3"
+}
